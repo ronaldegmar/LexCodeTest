@@ -1,0 +1,84 @@
+---
+# Use it as follows:
+# ansible-playbook -vv -i inventory/ec2.py devopsTest.yml --vault-password-file ~/.vault_pass.txt
+# to execute a single role run as follows:
+# ansible-playbook -vv -i inventory/ec2.py devopsTest.yml --vault-password-file ~/.vault_pass.txt --tags "orchestration"
+- name: Create an Ubuntu Linux instance on Amazon EC2
+  hosts: localhost
+  tags:
+    - always
+  vars_files:
+    - varsEC2.yml
+
+  tasks:
+
+  - name: Checking existing keypair
+    stat:
+      path: files/ec2_keyPair.pem
+    register: check_keypair
+
+  - name: Delete ec2_keyPair if already created in AWS and not present locally
+    ec2_key: name=ec2_keyPair region="{{ ec2_region }}" state=absent
+    when: not check_keypair.stat.exists
+
+  - name: create ec2_keyPair
+    ec2_key: name=ec2_keyPair region="{{ ec2_region }}" state=present
+    register: keypair
+    no_log: true
+
+  - name: write the key to a file
+    copy:
+      dest: files/ec2_keyPair.pem
+      content: "{{ keypair.key.private_key }}"
+      mode: 0600
+    when: keypair.changed
+
+  - name: start the instance
+    ec2:
+      image: "{{ ec2_image }}"
+      region: "{{ ec2_region }}"
+      zone: "{{ ec2_zone }}"
+      instance_type: "{{ ec2_instance_type }}"
+      key_name: ec2_keyPair
+      group: "{{ ec2_security_group }}"
+      instance_tags: '{"Name":"{{ec2_tag_Name}}","type":"{{ec2_tag_Type}}","env":"{{ec2_tag_Environment}}"}'
+      exact_count: "{{ count }}"
+      count_tag: '{"type":"{{ec2_tag_Type}}"}'
+      wait: yes
+    register: ec2
+
+  - name: Specify shorter delay in case instance is already created
+    set_fact:
+      delay: 5
+    when: not ec2.changed
+
+#  - name: print delay
+#    debug: msg="delay is {{ delay | default(30) }}"
+
+#  - name: print it
+#    debug: msg="item has {{ item.public_dns_name }}"
+#    with_items: "{{ ec2.tagged_instances }}"
+
+  - name: Add the instance to dev and production groups
+    add_host: hostname="{{ item.public_dns_name }}" groups=dev,production
+    with_items: "{{ ec2.tagged_instances }}"
+    when: item.public_dns_name is defined
+
+  - name: Wait for ssh server to be running
+    wait_for: host="{{ item.public_dns_name }}" port=22 search_regex=OpenSSH delay="{{ delay | default(30) }}"
+    with_items: "{{ ec2.tagged_instances }}"
+    when: item.public_dns_name is defined
+
+- name: configure webservers
+  hosts: dev:&production
+  become: yes
+  become_method: sudo
+  vars_files:
+#    - buildVars.yml
+    - ssh_keys.yml
+
+  roles:
+    - { role: ubuntu, tags: ['ubuntu'] }
+    - { role: host, tags: ['host'] }
+    - { role: docker, tags: ['docker'] }
+    - { role: orchestration, tags: ['orchestration'] }

@@ -1,0 +1,11 @@
+ec2_image: ami-4b133c5d
+#ec2_image: ami-d15a75c7
+ec2_region: us-east-1
+ec2_zone: us-east-1b
+ec2_instance_type: t2.medium
+ec2_security_group: ['SSH Accessible','WebServerSG']
+ec2_tag_Name: RubyonRailsOrchestration
+ec2_tag_Type: devopsTest
+ec2_tag_Environment: dockerTest
+#ec2_IAM: AMIBuilder
+count: 1

@@ -1,0 +1,69 @@
+- name: Creating composetest source directory
+  file: path=/home/ubuntu/composetest owner=ubuntu group=ubuntu recurse="yes" state=directory
+
+- name: Copying orchestration files
+  copy:
+    src: "{{ item }}"
+    dest: "/home/ubuntu/composetest/{{ item }}"
+    owner: ubuntu
+    group: ubuntu
+  with_items:
+    - Gemfile
+    - Dockerfile
+    - docker-compose.yml
+
+- name: Creating an empty Gemfile.lock
+  file: path=/home/ubuntu/composetest/Gemfile.lock owner=ubuntu group=ubuntu state=touch
+
+#- name: Restarting docker service
+#  command: service docker restart
+#  register: service_result
+#  until: service_result.rc == 0
+#  retries: 3
+#  delay: 2
+#- name: reset ssh connection to allow docker service changes to affect ubuntu current login user
+#  meta: reset_connection
+
+#- name: Changing permissions for docker.sock
+#  file: path=/var/run/docker.sock mode=0666 owner=root group=docker
+
+- name: docker-compose run
+  command: /home/ubuntu/dcompose/bin/docker-compose run web rails new . --force --database=postgresql
+  args:
+      chdir: /home/ubuntu/composetest
+  become: true
+  become_method: sudo
+  become_user: ubuntu
+
+- name: docker-compose build
+  command: /home/ubuntu/dcompose/bin/docker-compose build
+  args:
+      chdir: /home/ubuntu/composetest
+  become: true
+  become_method: sudo
+  become_user: ubuntu
+
+- name: Copying database.yml file
+  copy:
+    src: database.yml
+    dest: /home/ubuntu/composetest/config/database.yml
+    owner: ubuntu
+    group: ubuntu
+
+- name: docker-compose up
+  command: /home/ubuntu/dcompose/bin/docker-compose up
+  args:
+      chdir: /home/ubuntu/composetest
+  become: true
+  become_method: sudo
+  become_user: ubuntu
+  async: 45
+  poll: 0
+
+- name: docker-compose run
+  command: /home/ubuntu/dcompose/bin/docker-compose run web rake db:create
+  args:
+      chdir: /home/ubuntu/composetest
+  become: true
+  become_method: sudo
+  become_user: ubuntu

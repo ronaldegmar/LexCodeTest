@@ -1,0 +1,68 @@
+- name: Add Docker’s official GPG key
+  shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+
+- name: Set up Docker stable repository
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu trusty stable
+    state: present
+
+- name: Installing docker comunity edition
+  apt: pkg=docker-ce state=present update_cache=yes
+
+- name: Create docker group
+  group:
+    name: docker
+    state: present
+
+- name: Adding existing ubuntu user to docker group
+  user: name=ubuntu groups=docker append=yes
+- name: reset ssh connection to allow user changes to affect ubuntu current login user
+  meta: reset_connection
+
+- name: "Installing virtualenv and virtualenvwrapper"
+  pip:
+    name: "{{ item }}"
+    state: present
+  with_items:
+#    - docker-py
+    - virtualenv
+    - virtualenvwrapper
+
+- name: Registering virtualenv path
+  shell: which virtualenv
+  register: virtualenv_path
+
+- name: Initiating virtualenv for docker-compose
+  pip:
+    name: docker-compose
+    virtualenv: /home/ubuntu/dcompose
+    virtualenv_command: "{{ virtualenv_path.stdout }}"
+    virtualenv_python: python2.7
+  become: true
+  become_method: sudo
+  become_user: ubuntu
+
+- name: Retrieving ec2_facts from instance
+  ec2_facts:
+  register: ec2_facts
+  no_log: true
+
+- name: Setting MY_INSTANCE
+  set_fact:
+    MY_INSTANCE: "{{ ansible_ec2_public_hostname }}"
+  no_log: true
+
+- name: reboot the server
+  shell: sleep 2 && shutdown -r now
+  async: 1
+  poll: 0
+
+- name: Wait for server come back
+  wait_for: >
+       host="{{ MY_INSTANCE }}"
+       port=22
+       delay=15
+       timeout=600
+       search_regex=OpenSSH
+  delegate_to: localhost
+  become: false

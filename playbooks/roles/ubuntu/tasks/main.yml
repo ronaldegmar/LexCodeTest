@@ -1,0 +1,23 @@
+- name: Adding developer keys to ec2-user account
+  copy:
+    dest="{{ item.key }}"
+    content="{{ item.value.content }}"
+    owner="{{ item.value.owner }}"
+    group="{{ item.value.group }}"
+    mode="{{ item.value.mode }}"
+  with_dict: "{{ developer_pubkeys }}"
+  no_log: true
+  tags: devpubkeys
+
+- name: Loading pkg_reqs
+  include_vars: "pkg_defs.yml"
+  no_log: true
+
+- name: Updating the system
+  apt: upgrade=dist update_cache=yes
+#  no_log: true
+
+- name: Installing required packages
+  apt: pkg="{{ item }}"
+  with_items: "{{ pkg_reqs }}"
+  no_log: true
